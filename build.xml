@@ -1,0 +1,533 @@
+<project name="DAISY-nbcuni" default="dist">
+
+	<property name="build.sysclasspath" value="ignore" />
+	<property name="java-version" value="1.6" />
+	<property name="dist-directory" value="dist" />
+	<property name="ws.build" value="ws-build" />
+	<property name="package-name" value="daisy" />
+	<property file="build.properties" />
+    <property name="apache.cxf.home" value="tools/apache-cxf-2.5.2" />
+
+	<path id="ws.classpath">
+		<fileset dir="lib">
+			<include name="spring*.jar"/>
+		</fileset>
+		<fileset dir="lib-build">
+			<include name="jaxb-*.jar"/>
+			<include name="jaxws-*.jar"/>
+			<include name="jboss-*.jar"/>
+			<include name="ejb3-*.jar"/>
+			<include name="hibernate*.jar"/>
+			<include name="jbossws-*.jar"/>
+		</fileset>
+	</path>
+        
+	<path id="test.classpath">
+		<fileset dir="lib-build">
+			<include name="asset-manager-client.jar"/>
+			<include name="commons-logging.jar"/>
+			<include name="junit-*.jar"/>
+		</fileset>
+		<fileset dir="lib-build/cxf">
+			<include name="commons-collections-3.2.1.jar"/>
+		</fileset>
+		<fileset dir="lib">
+			<include name="dom4j-1.6.1.jar"/>
+			<include name="ojdbc14.jar"/>
+			<include name="spring-*.jar"/>
+			<include name="slf4j-*.jar"/>
+			<include name="zjsonpatch.jar"/>
+		</fileset>
+		<fileset dir="lib/ivy">
+			<include name="hibernate-*.jar"/>
+			<include name="javassist-*.jar"/>
+		</fileset>
+                <pathelement path="classes" />
+                <pathelement path="classes/test" />
+                <pathelement path="test" />
+                <path refid="ws.classpath"/>
+	</path>
+
+	<!-- Webdoclet configuration -->
+	<path id="xdoclet.classpath">
+		<fileset dir="tools">
+			<include name="**/*.jar"/>
+		</fileset>
+		<fileset dir="lib-build">
+			<include name="**/*.jar"/>
+		</fileset>
+	</path>
+	<taskdef classpathref="xdoclet.classpath" classname="xdoclet.modules.web.WebDocletTask" name="webdoclet"/>	
+
+	<!-- classpaths -->
+	<path id="manifest-classpath">
+		<fileset dir="lib">
+			<include name="**/*.jar" />
+		</fileset>
+	</path>
+
+    <path id="cxf.classpath">
+        <fileset dir="${apache.cxf.home}/lib">
+            <include name="*.jar" />
+        </fileset>
+    </path>
+
+    <taskdef name="xjc" classname="com.sun.tools.xjc.XJCTask">
+	  <classpath>
+	    <fileset dir="lib-build" includes="jaxb-xjc.jar" />
+	  </classpath>
+	</taskdef>
+	
+	<target name="init">
+		<tstamp>
+			<format property="build.time" pattern="MM/dd/yyyy hh:mm aa" />
+		</tstamp>
+		<echo>Build initiated at ${build.time}</echo>
+		<mkdir dir="classes" />
+		<mkdir dir="${dist-directory}" />
+	</target>
+
+	<!-- environment related init properties -->
+	<target name="init-dev" depends="init">
+
+        <echo>The DEV properties is ${DEST_ENV}</echo>
+
+		<property name="daisy-conf-file" value="config/dev/daisy_main.conf" />
+		<property name="mongodb-conf-file" value="config/dev/mongodb.properties" />
+		<property name="persistence-file" value="config/dev/persistence.xml" />
+		<property name="caching-config-file" value="config/dev/daisyCache-config.xml" />
+		<property name="otto-template-config-file" value="config/dev/OTTOFileNamingTemplates.xml" />
+		<property name="facelets.dev" value="true" />
+	</target>
+
+	<target name="init-test" depends="init">
+
+        <echo>The QA properties is ${DEST_ENV}</echo>
+
+		<property name="daisy-conf-file" value="config/test/daisy_main.conf" />
+		<property name="mongodb-conf-file" value="config/test/mongodb.properties" />
+		<property name="persistence-file" value="config/test/persistence.xml" />
+		<property name="caching-config-file" value="config/test/daisyCache-config.xml" />
+		<property name="otto-template-config-file" value="config/test/OTTOFileNamingTemplates.xml" />
+		<property name="facelets.dev" value="false" />
+	</target>
+
+	<target name="init-release" depends="init">
+		<property name="daisy-conf-file" value="config/prod/daisy_main.conf" />
+		<property name="mongodb-conf-file" value="config/prod/mongodb.properties" />
+		<property name="persistence-file" value="config/prod/persistence.xml" />
+		<property name="caching-config-file" value="config/prod/daisyCache-config.xml" />
+		<property name="otto-template-config-file" value="config/prod/OTTOFileNamingTemplates.xml" />
+		<property name="facelets.dev" value="false" />
+	</target>
+
+	<target name="clean">
+		<delete dir="classes" />
+		<delete dir="${dist-directory}" />
+		<delete dir="${ws.build}" />
+	</target>
+	
+	<!--		
+		Generate web.xml
+	-->
+	<target name="xdoclet" depends="init">
+		<copy todir="${dist-directory}/merge" overwrite="true" >
+			<fileset dir="view/WEB-INF/merge" >
+				<exclude name="**/web-settings.xml" />
+			</fileset>
+		</copy>
+		<copy file="view/WEB-INF/merge/web-settings.xml" overwrite="true"
+			tofile="${dist-directory}/merge/web-settings.xml">
+			<filterchain>
+				<replacetokens>
+					<token key="facelets.dev" value="${facelets.dev}"/>
+				</replacetokens>
+			</filterchain>
+		</copy>
+		<webdoclet destDir="${dist-directory}" verbose="true">
+			<fileset dir="src" includes="**/*Servlet.java **/*Filter.java"/>
+			<deploymentdescriptor destDir="${dist-directory}/WEB-INF" mergeDir="${dist-directory}/merge" servletspec="2.4"/>
+		</webdoclet>
+
+		<replace file="${dist-directory}/WEB-INF/web.xml" token="2.4" value="2.5" summary="true" />
+		<replace file="${dist-directory}/WEB-INF/web.xml" token="2_4" value="2_5" summary="true" />
+		<replace file="${dist-directory}/WEB-INF/web.xml" token="j2ee" value="javaee" summary="true" />
+
+	</target>
+
+	<target name="compile" depends="init,xdoclet">
+		<!-- Local classpath definition -->
+		<path id="compile-classpath">
+			<fileset dir="lib">
+				<include name="**/*.jar" />
+			</fileset>
+			<fileset dir="lib-build">
+				<include name="**/*.jar" />
+			</fileset>
+			<fileset dir="view/WEB-INF/lib">
+				<include name="**/*.jar" />
+			</fileset>
+		</path>
+
+		<javac debug="true" classpathref="compile-classpath" destdir="classes" target="${java-version}" source="${java-version}">
+			<src path="src" />
+		</javac>
+	</target>
+
+	<!-- package up everything and put it in a ear file. -->
+	<target name="package" depends="asset-manager-ws-artifacts">
+		<propertyfile comment="DAISY Build Information" file="${dist-directory}/build.properties">
+			<entry key="build.version" value="RELEASE-0.1" />
+			<entry key="build.timestamp" type="date" pattern="MM/dd/yyyy HH:mm" value="now" />
+		</propertyfile>
+		<copy file="${daisy-conf-file}" tofile="${dist-directory}/daisy_main.conf" />
+		<copy file="${mongodb-conf-file}" tofile="${dist-directory}/mongodb.properties" />
+		<copy file="${persistence-file}" tofile="${dist-directory}/META-INF/persistence.xml" />
+        <copy todir="${dist-directory}/META-INF/templates/">
+            <fileset dir="view/WEB-INF/templates"/>
+        </copy>
+        <copy file="${caching-config-file}" tofile="${dist-directory}/daisyCache-config.xml" />
+		<!-- package for deployment on the server -->
+
+		<manifestclasspath property="manifest_cpp" jarfile="${dist-directory}/${package-name}-server.jar">
+			<classpath refid="manifest-classpath" />
+		</manifestclasspath>
+
+		<property name="manifest-class-path" value="build.properties ehcache.xml ${manifest_cpp}" />
+
+		<jar destfile="${dist-directory}/${package-name}-server.jar">
+			<manifest>
+				<attribute name="Class-Path" value="${manifest-class-path}" />
+			</manifest>
+			<fileset dir="classes">
+				<include name="**/*LoginDomainHelper.class" />
+				<include name="**/client/external/**" />
+				<include name="**/client/printpdf/MmrHeaderFooter.class" />
+				<include name="**/client/printpdf/Report*.class" />
+			</fileset>
+			<fileset dir="classes">
+				<include name="**/*.class" />
+				<exclude name="**/daisy/client/**/*" />
+			</fileset>
+			<fileset file="${dist-directory}/daisy_main.conf" />
+			<fileset file="${dist-directory}/mongodb.properties" />
+			<zipfileset file="${dist-directory}/META-INF/persistence.xml" prefix="META-INF" />
+            <zipfileset dir="${dist-directory}/META-INF/templates" prefix="META-INF/templates" />
+			<fileset file="${otto-template-config-file}" />
+			<fileset file="${otto-template-config-file}" />
+			<fileset file="src/rebel.xml" />
+		</jar>
+
+		<!-- Package for the client -->
+		<jar destfile="${dist-directory}/${package-name}-client.jar">
+			<fileset dir="classes" includes="**/daisy/client/**/*.class" />
+		</jar>
+
+		<war destfile="${dist-directory}/daisy.war" webxml="${dist-directory}/WEB-INF/web.xml" update="true">
+			<manifest>
+				<attribute name="Class-Path" value="${manifest-class-path}" />
+			</manifest>
+			<fileset dir="view">
+				<include name="WEB-INF/jboss-web.xml" />
+				<include name="WEB-INF/jboss-wsse-server.xml" />
+				<include name="WEB-INF/daisyws-jboss-beans.xml" />				
+				<include name="WEB-INF/faces-config.xml" />
+				<include name="WEB-INF/daisy.taglib.xml" />
+				<include name="WEB-INF/components/*.xhtml" />
+				<include name="WEB-INF/templates/*.vm" />
+				<include name="WEB-INF/classes/rebel.xml" />
+				<include name="app/**/*" />
+				<include name="mobile/**/*" />
+				<include name="test/**/*" />
+				<include name="errors/**/*" />
+				<include name="*.xhtml" />
+				<include name="*.html" />
+				<include name="*.jsp" />
+				<include name="*.jsf" />
+				<include name="**/*.html" />
+				<include name="**/*.css" />
+				<include name="**/*.js" />
+				<include name="**/*.swf" />
+				<include name="**/*.gif" />
+				<include name="**/*.png" />
+				<include name="im/**" />
+				<include name="images/**" />
+				<include name="fonts/**" />
+				<include name="sounds/**" />
+				<exclude name="**/CVS/**/*" />
+			</fileset>
+			<lib dir="view/WEB-INF/lib" />
+			<!-- <zipfileset dir="src/META-INF/" includes="NBC_ProcurementManager.wsdl" prefix="WEB-INF/classes" /> -->
+			<lib file="${dist-directory}/${package-name}-client.jar" />
+			<classes file="${dist-directory}/SigniantFileUpload.conf" />
+		</war>
+
+		<ear destfile="${dist-directory}/${package-name}.ear" appxml="src/META-INF/application.xml">
+			<fileset dir="${dist-directory}">
+				<include name="${package-name}.war" />
+				<include name="${package-name}-server.jar" />
+				<include name="build.properties" />
+				<include name="daisyCache-config.xml" />
+			</fileset>
+			<zipfileset dir="lib" prefix="lib">
+				<include name="*.*" />
+			</zipfileset>
+			<zipfileset dir="src/META-INF" prefix="META-INF">
+				<include name="jboss-app.xml" />
+				<include name="scheduler-service.xml" />
+				<include name="jobQueue-service.xml" />
+			</zipfileset>
+			<zipfileset dir="src/META-INF">
+				<include name="ehcache.xml" />
+			</zipfileset>		
+			<zipfileset file="src/META-INF/assetManagerContext.xml" />
+            <zipfileset file="src/META-INF/springContext.xml" />
+			<zipfileset file="src/META-INF/archiveManagerContext.xml" />
+			<zipfileset file="src/META-INF/modeContext.xml" />
+			<zipfileset file="src/META-INF/beanRefContext.xml" />
+			<zipfileset file="src/META-INF/NBC_ProcurementManager.wsdl" />
+			<zipfileset file="src/META-INF/OTTO_MDSService.wsdl" />
+            <zipfileset file="src/META-INF/XytechAPI.wsdl" />
+		</ear>
+
+		<tstamp>
+			<format property="build.time" pattern="MM/dd/yyyy hh:mm aa" />
+		</tstamp>
+		<echo>Build completed at ${build.time}</echo>
+	</target>
+
+    <target name="dist" depends="clean, init-dev, package" />
+
+
+    <target name="test" depends="clean, init-test, package" />
+	
+	<target name="release" depends="clean, init-release, package" />
+	
+	<taskdef name="wsgen" classname="com.sun.tools.ws.ant.WsGen" classpathref="ws.classpath" />
+	<taskdef name="wsimport" classname="com.sun.tools.ws.ant.WsImport" classpathref="ws.classpath" />
+        
+	<target name="asset-manager-ws-init" depends="compile">
+		<delete dir="${ws.build}" />
+		<delete file="lib/asset-manager-ws-artifacts.jar" />
+		<delete file="lib-build/asset-manager-client.jar" />
+	</target>
+	
+	<target name="asset-manager-ws-artifacts" depends="asset-manager-ws-init">
+		<mkdir dir="${ws.build}/src-gen" />
+		<mkdir dir="${ws.build}/class-gen" />
+		<mkdir dir="${ws.build}/resource-gen" />
+		
+		<wsgen sei="com.nbcuni.daisy.ws.asset.AssetManagerEJB"
+			   destdir="${ws.build}/class-gen"
+			   resourcedestdir="${ws.build}/resource-gen"
+			   sourcedestdir="${ws.build}/src-gen"
+			   genwsdl="true"
+			   xendorsed="true">
+			<classpath>
+				<pathelement path="classes" />
+				<path refid="ws.classpath" />
+			</classpath>
+		</wsgen>
+		
+		<jar jarfile="lib/asset-manager-ws-artifacts.jar">
+			<fileset dir="${ws.build}/class-gen">
+				<include name="**/*.class" />
+			</fileset>
+			<fileset dir="${ws.build}/resource-gen">
+				<include name="**/*" />
+			</fileset>
+		</jar>
+	</target>
+	
+	<target name="asset-manager-client-jar" depends="asset-manager-ws-artifacts">
+		<delete dir="${ws.build}/src-gen" />
+		<delete dir="${ws.build}/class-gen" />
+		<mkdir dir="${ws.build}/src-gen" />
+		<mkdir dir="${ws.build}/class-gen" />
+		<copy file="src/META-INF/AssetManager-bindings.xml" todir="${ws.build}/resource-gen" overwrite="true" />
+		<wsimport wsdl="${ws.build}/resource-gen/AssetManagerService.wsdl"
+				  binding="${ws.build}/resource-gen/AssetManager-bindings.xml"
+				  package="com.nbcuni.daisy.ws.asset.client"
+				  sourcedestdir="${ws.build}/src-gen"
+				  destdir="${ws.build}/class-gen"
+				  xendorsed="true" />
+		<jar jarfile="lib-build/asset-manager-client.jar">
+			<fileset dir="${ws.build}/class-gen">
+				<include name="**/*.class" />
+			</fileset>
+		</jar>
+		<delete dir="${ws.build}" />
+	</target>
+	
+	<target name="bss-client-jar">
+		<delete dir="${ws.build}" />
+		<delete file="lib/bss-client.jar" />
+		<mkdir dir="${ws.build}/src-gen" />
+		<mkdir dir="${ws.build}/class-gen" />
+		<wsimport wsdl="src/META-INF/NBC_ProcurementManager.wsdl"
+				  binding="src/META-INF/bss-bindings.xml"
+				  sourcedestdir="${ws.build}/src-gen"
+				  destdir="${ws.build}/class-gen"
+				  xendorsed="true" />
+		<jar jarfile="lib/bss-client.jar">
+			<fileset dir="${ws.build}/class-gen">
+				<include name="**/*.class" />
+			</fileset>
+		</jar>
+		<delete dir="${ws.build}" />
+	</target>
+	
+	<target name="otto-client-jar">
+			<delete dir="${ws.build}" />
+			<delete file="lib/otto-client.jar" />
+			<mkdir dir="${ws.build}/src-gen" />
+			<mkdir dir="${ws.build}/class-gen" />
+			<xjc destdir="${ws.build}/src-gen" >
+		  		<schema  dir="src/META-INF" includes="otto-mdsservice*.xsd" />
+		  		<schema  dir="src/META-INF" includes="otto-filenamingservice*.xsd" />
+		  		<schema  dir="src/META-INF" includes="otto-archiveservice*.xsd" />
+		  		<schema  dir="src/META-INF" includes="otto-restoreservice*.xsd" />
+			</xjc>
+			<javac debug="true" destdir="${ws.build}/class-gen" target="${java-version}" source="${java-version}">
+					<src path="${ws.build}/src-gen" />
+				</javac>
+			<wsimport wsdl="src/META-INF/OTTO_MDSService.wsdl"
+					  binding="src/META-INF/otto-mdsservice-bindings.xml"
+					  sourcedestdir="${ws.build}/src-gen"
+					  destdir="${ws.build}/class-gen"
+					  xendorsed="true" />
+			<jar jarfile="lib/otto-client.jar">
+				<fileset dir="${ws.build}/class-gen">
+					<include name="**/*.class" />
+				</fileset>
+			</jar>
+	</target>
+
+	<target name="package-otto-client-jar">
+			<delete dir="${ws.build}/class-gen" />
+			<delete file="lib/otto-client.jar" />
+			<mkdir dir="${ws.build}/class-gen" />
+			<javac debug="true" destdir="${ws.build}/class-gen" target="${java-version}" source="${java-version}">
+					<src path="${ws.build}/src-gen" />
+			</javac>
+			<jar jarfile="lib/otto-client.jar">
+				<fileset dir="${ws.build}/class-gen">
+					<include name="**/*.class" />
+				</fileset>
+			</jar>
+	</target>
+
+
+    <target name="xytech-client-jar">
+        <delete dir="${ws.build}" />
+        <delete file="lib/xytech-client.jar" />
+        <mkdir dir="${ws.build}/src-gen" />
+        <mkdir dir="${ws.build}/class-gen" />
+
+        <java classname="org.apache.cxf.tools.wsdlto.WSDLToJava" fork="true">
+            <arg value="-client" />
+            <arg value="-p" />
+            <arg value="com.nbcuni.daisy.ws.xytech.api" />
+            <arg value="-frontend" />
+            <arg value="jaxws21" />
+            <arg value="-d" />
+            <arg value="${ws.build}/src-gen" />
+            <arg value="src/META-INF/XytechAPI.wsdl"/>
+            <classpath>
+                <path refid="cxf.classpath"/>
+            </classpath>
+        </java>
+
+        <javac destdir="${ws.build}/class-gen" debug="true" srcdir="${ws.build}/src-gen">
+            <classpath refid="ws.classpath"/>
+        </javac>
+
+        <jar jarfile="lib/xytech-client.jar">
+            <fileset dir="${ws.build}/class-gen">
+                <include name="**/*.class" />
+            </fileset>
+        </jar>
+    </target>
+	
+	<target name="compile-tests" depends="asset-manager-client-jar">
+		<mkdir dir="classes/test" />
+
+		<javac debug="true" destdir="classes/test" target="${java-version}" source="${java-version}">
+			<src path="test" />
+			<classpath refid="test.classpath" />
+		</javac>
+	</target>
+        
+	<target name="run-tests" depends="compile-tests">
+		<mkdir dir="test-reports" />
+		<junit printsummary="on" fork="false" showoutput="true" failureproperty="test.failed">
+			<classpath refid="test.classpath" />
+			<batchtest fork="no" todir="test-reports">
+				<fileset dir="test">
+					<include name="**/*Test*.java"/>
+				</fileset>
+				<formatter type="xml" />
+			</batchtest>
+		</junit>
+		<fail if="test.failed" message="JUnit tests failed" />
+	</target>
+
+	<target name="daisyjboss-setup" >
+		<copy file="view/WEB-INF/security_conf/props/daisyws-roles.properties" todir="${jboss.daisy}/conf" />
+		<copy file="view/WEB-INF/security_conf/props/daisyws-users.properties" todir="${jboss.daisy}/conf" />
+	</target>	
+	
+	<target name="deploy" depends="clean,dist,daisyjboss-setup" >
+		<copy file="${dist-directory}/${package-name}.ear" todir="${jboss.daisy}/deploy" />
+		<copy file="db-config/oracle-daisy-ds.xml" todir="${jboss.daisy}/deploy" />
+	</target>	
+	
+	<target name="undeploy" >
+		<delete file="${jboss.daisy}/deploy/${package-name}.ear" />
+		<delete file="${jboss.daisy}/conf/daisyws-users.properties" />		
+		<delete file="${jboss.daisy}/conf/daisyws-roles.properties" />
+		<delete dir="${jboss.daisy}/tmp" />
+		<mkdir dir="${jboss.daisy}/tmp" />
+		<delete dir="${jboss.daisy}/work/jboss.web/localhost/daisy" />
+	</target>	
+
+	<target name="redeploy" depends="undeploy,clean,dist,daisyjboss-setup" >
+		<copy file="${dist-directory}/${package-name}.ear" todir="${jboss.daisy}/deploy" />
+		<copy file="db-config/oracle-daisy-ds.xml" todir="${jboss.daisy}/deploy" />
+	</target>	
+
+	<target name="redeploy-without-rebuilt" depends="undeploy" >
+		<copy file="${dist-directory}/${package-name}.ear" todir="${jboss.daisy}/deploy" />
+		<copy file="db-config/oracle-daisy-ds.xml" todir="${jboss.daisy}/deploy" />
+	</target>
+
+    <!-- JENKINS config -->
+
+    <condition property="is_dev">
+        <equals arg1="${DEST_ENV}" arg2="DEV"/>
+    </condition>
+
+    <condition property="is_qa">
+        <equals arg1="${DEST_ENV}" arg2="QA"/>
+    </condition>
+
+    <target name="jenkins-build-DEV" if="is_dev">
+        <delete dir="${dist-directory}" />
+        <antcall target="dist"/>
+    </target>
+
+    <target name="jenkins-build-QA" if="is_qa">
+        <delete dir="${dist-directory}" />
+        <antcall target="test"/>
+    </target>
+
+    <target name="jenkins-release">
+        <delete dir="${dist-directory}" />
+        <antcall target="release"/>
+    </target>
+
+    <target name="jenkins-build" depends="jenkins-build-DEV, jenkins-build-QA"/>
+
+    <target name="jenkins-build-prod" depends="jenkins-release"/>
+
+</project>
