@@ -526,8 +526,4 @@
         <antcall target="release"/>
     </target>
 
-    <target name="jenkins-build" depends="jenkins-build-DEV, jenkins-build-QA"/>
-
-    <target name="jenkins-build-prod" depends="jenkins-release"/>
-
 </project>
